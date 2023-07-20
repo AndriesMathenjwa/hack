@@ -6,45 +6,90 @@ var mysql =require('mysql')
 var  mysqlConnection = require('../config/connection');
 var fs = require ("fs");
 const bcrypt = require('bcrypt')
+const session = require('express-session');
 
- 
+
+const strongPass = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*]).{8,}$/;
+
+
+
 //admin registration
-router.post('/admin/register', (req, res) => {
-    //console.log(req.body);
-    const {name,surname,email,password,passwordConfirm} = req.body;
+// router.post('/admin/register', (req, res) => {
+//     //console.log(req.body);
+//     const {name,surname,email,password,passwordConfirm,Admin_id} = req.body;
 
-    mysqlConnection.query('SELECT email FROM admin where email = ?', [email], async (error, results)=>{
-        if(error){
-            console.log(error)
-        }
-         if(results.length > 0){
-            return res.json({
-                success: false,
-                message: "email already exist"
-            })
+//     mysqlConnection.query('SELECT email FROM admin where email = ?', [email], async (error, results)=>{
+//         if(error){
+//             console.log(error)
+//         }
+//          if(results.length > 0){
+//             return res.json({
+//                 success: false,
+//                 message: "email already exist"
+//             })
    
-        }else if(password !== passwordConfirm){
-            return res.json({
-                success: false,
-                message: "password does not match"
-            })
-        }else{
-        let hashedPassword = await bcrypt.hash(password, 8);
+//         }else if(password !== passwordConfirm){
+//             return res.json({
+//                 success: false,
+//                 message: "password does not match"
+//             })
+//         }else{
+//         let hashedPassword = await bcrypt.hash(password, 8);
     
-        mysqlConnection.query('INSERT INTO admin SET ?',{name: name,surname :surname,email: email,password: hashedPassword},(error, results) =>{
-            if(error){
-                console.log(error)
-            }else{
-                return res.json({
-                    success: true,
-                    message: "successfully registered"
-                })
-                console.log(results);
-        }   
+//         mysqlConnection.query('INSERT INTO admin SET ?',{name: name,surname :surname,email: email,password: hashedPassword,Admin_id:Admin_id},(error, results) =>{
+//             if(error){
+//                 console.log(error)
+//             }else{
+//                 return res.json({
+//                     success: true,
+//                     message: "successfully registered"
+//                 })
+//                 console.log(results);
+//         }   
+//      });
+//     }
+//     })  
+// })
+router.post('/admin/registration', (req, res) => {
+     const { name, surname, email, password, passwordConfirm } = req.body;
+    
+     if (!strongPass.test(password)) {
+        return res.json({
+            success: false,
+            message: "Please enter a Strong Password"
+        });
+      }
+        mysqlConnection.query('SELECT email FROM admin WHERE email = ?', [email], async (error, results) => {
+            if (error) {
+               console.log(error);
+     }
+     if (results.length > 0) {
+      return res.json({
+      success: false,
+      message: "Email already exists."
+      });
+     } else if (password !== passwordConfirm) {
+      return res.json({
+      success: false,
+      message: "Passwords do not match."
+      });
+     } else {
+      let hashedPassword = await bcrypt.hash(password, 8);
+    
+      mysqlConnection.query('INSERT INTO admin SET ?', { name: name, surname: surname, email: email, password: hashedPassword }, (error, results) => {
+      if (error) {
+       console.log(error);
+      } else {
+       return res.json({
+       success: true,
+       message: "Successfully registered."
+       });
+       console.log(results);
+      }
+      });
+     }
      });
-    }
-    })  
-})
+    });
 //Admin login
 router.post('/admin/login', (req, res) => {
     const { email, password } = req.body;
@@ -71,11 +116,13 @@ router.post('/admin/login', (req, res) => {
                  surname: results[0].surname
             
           }
+          //req.session.userId = Admin_id;
+
             return res.json({
               success: true,
               results,
               user,
-              message: "password match"
+              message: "Welcome "+user.name+' '+user.surname
             });
           } else {
             return res.json({
@@ -92,12 +139,48 @@ router.post('/admin/login', (req, res) => {
       }
     });
   });
+
+ 
+  //tryng to authentiate judge
+  /*const authenticateJugde = (req, res, next) => {
+    if (req.session.userId) {
+      // Judge is logged in, proceed to the next middleware or route handler
+      next();
+    } else {
+      res.json({
+        success: false,
+        message: 'Judge not logged in'
+      });
+    }
+  };
+  //end of authentication
+  //trying authenticating hacker
+  const authenticateHacker = (req, res, next) => {
+    if (req.session.userId) {
+      // Hacker is logged in, proceed to the next middleware or route handler
+      next();
+    } else {
+      res.json({
+        success: false,
+        message: 'Hacker not logged in'
+      });
+    }
+  };*/
+  //end of authenticating
+
   
 //judge registration
-router.post('/judge/registration', (req, res) => {
+router.post('/judge/registration',  (req, res) => {
    // console.log(req.body);
     const {judge_id,judge_name,judge_surname,email,company_name,password,passwordConfirm,Admin_id} = req.body;
 
+    if (!strongPass.test(password)) {
+        return res.json({
+            success: false,
+            message: "Please enter a Strong Password"
+        });
+      }
+   
     mysqlConnection.query('SELECT email FROM  judge where email = ?', [email], async (error, results)=>{
         if(error){
             console.log(error)
@@ -161,7 +244,7 @@ router.post('/judge/login', (req, res) => {
                     success: true,
                     results,
                     user,
-                    message: "password match"
+                    message: "Welcome "+user.judge_name+' '+user.judge_surname
                 })
             }else{
                 res.json({
@@ -181,7 +264,7 @@ router.post('/judge/login', (req, res) => {
 
 //getting all registerd judges
 router.get('/judge/judges', (req, res)=> {
-    mysqlConnection.query("SELECT judge_name,judge_surname AS judges FROM judge ORDER BY judge_id  asc",(error, results) =>{
+    mysqlConnection.query("SELECT judge_name,judge_surname,judge_id AS judges FROM judge ORDER BY judge_id  asc",(error, results) =>{
         if(error){
             console.log(error)
         }else{
@@ -195,11 +278,30 @@ router.get('/judge/judges', (req, res)=> {
 
 
 //hackers  registration
+//trying to authenticate
 
-router.post('/hacker/registration', (req, res) => {
+/*const authenticateAdmin = (req, res, next) => {
+    if (req.session.userId) {
+      // Admin is logged in, proceed to the next middleware or route handler
+      next();
+    } else {
+      res.json({
+        success: false,
+        message: 'Admin not logged in'
+      });
+    }
+  };*/
+
+router.post('/hacker/registration',  (req, res) => {
     console.log(req.body);
     const {group_id,stu_no,stu_name,stu_surname,email,password,passwordConfirm,group_name,Admin_id} = req.body;
-    
+    //const Admin_id = req.session.userId;
+    if (!strongPass.test(password)) {
+        return res.json({
+            success: false,
+            message: "Please enter a Strong Password"
+        });
+      }
 
     mysqlConnection.query('SELECT email FROM  hacker where email = ?', [email], async (error, results)=>{
         if(error){
@@ -263,7 +365,7 @@ router.post('/hacker/login', (req, res) => {
                     success: true, 
                     results,
                     user,
-                    message: "password match"
+                    message: "Welcome "+user.group_name+' TEAM'
                 })
             }else{
                 res.json({
@@ -360,9 +462,9 @@ router.get('/files', (req, res)=> {
 
     //assigning points to team
 
-    router.post('/team/points', (req,res) => {
-        const {points_id,group_id,group_name,points,isPublished = false,judge_id} = req.body;
-        mysqlConnection.query("insert into team set ?",{points_id:points_id,group_id:group_id,group_name: group_name,points: points,isPublished: isPublished,judge_id:judge_id},(error, results) =>{
+    router.post('/team/points',  (req,res) => {
+        const {points_id,group_name,points,isPublished = false,judge_id} = req.body;
+        mysqlConnection.query("insert into team set ?",{points_id:points_id,group_name: group_name,points: points,isPublished: isPublished,judge_id:judge_id},(error, results) =>{
             if(error){
                 console.log(error);
             }else{
@@ -475,9 +577,9 @@ router.get('/files', (req, res)=> {
   // assigning judge slots
 
 router.post('/judge/slot', (req,res) => {
-    const {slot_id,judge_id,judge_name,start_time,length,end_time,date,Admin_id} = req.body;
+    const {slot_id,judge_name,start_time,length,end_time,date,Admin_id} = req.body;
 
-    mysqlConnection.query("insert into judgeslot set ?",{slot_id:slot_id,judge_id:judge_id,judge_name:judge_name,start_time:start_time,length:length,end_time:end_time,date:date,Admin_id:Admin_id},(error, results) =>{
+    mysqlConnection.query("insert into judgeslot set ?",{slot_id:slot_id,judge_name:judge_name,start_time:start_time,length:length,end_time:end_time,date:date,Admin_id:Admin_id},(error, results) =>{
         if(error){
             console.log(error);
         }else{
@@ -544,7 +646,7 @@ ORDER by sum(points)/count(team.judge_id) DESC"*/
 
 
 router.get('/report',(req,res) =>{
-    mysqlConnection.query('SELECT DISTINCT admin.name,admin.surname,judge.judge_name,judge.judge_surname,judge.company_name ,hacker.group_name,FORMAT(sum(points)/count(judge.judge_id),0)AS points,DATE_FORMAT(SYSDATE(), "%W %M %e %Y") as date From admin,hacker,team,judge Where admin.Admin_id = hacker.Admin_id AND hacker.Admin_id = judge.Admin_id AND judge.judge_id = team.judge_id AND hacker.group_name = team.group_name group BY hacker.group_name HAVING sum(points)/count(judge.judge_id) ORDER by sum(points)/count(judge.judge_id) DESC',(error,results) =>{
+    mysqlConnection.query('SELECT DISTINCT admin.name,admin.surname,judge.judge_name,judge.judge_surname,judge.company_name ,hacker.group_name,FORMAT(sum(points)/count(judge.judge_id),0)AS points,DATE_FORMAT(SYSDATE() , "%W %M %e %Y") AS time From admin,hacker,team,judge Where admin.Admin_id = hacker.Admin_id AND hacker.Admin_id = judge.Admin_id AND judge.judge_id = team.judge_id AND hacker.group_name = team.group_name group BY hacker.group_name HAVING sum(points)/count(judge.judge_id) ORDER by sum(points)/count(judge.judge_id) DESC',(error,results) =>{
         if(error){
             console.log(error)
         }else{
